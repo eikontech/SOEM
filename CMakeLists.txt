@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 2.8.4)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules")
-project(SOEM C)
+project(SOEM)
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   # Default to installing in SOEM source directory
   set(CMAKE_INSTALL_PREFIX ${CMAKE_SOURCE_DIR}/install)
 endif()
 
-set(SOEM_INCLUDE_INSTALL_DIR include/soem)
+set(SOEM_INCLUDE_INSTALL_DIR include/soem_ros2)
 set(SOEM_LIB_INSTALL_DIR lib)
 set(BUILD_TESTS TRUE)
 
