@@ -77,9 +77,6 @@ void simpletest(char *ifname)
     struct TorqueIn *val;
     struct TorqueOut *target;
 
-    struct TorqueIn *val2;
-    struct TorqueOut *target2;
-
     printf("Starting simple test\n");
 
     /* initialise SOEM, bind socket to ifname */
@@ -243,17 +240,17 @@ void simpletest(char *ifname)
                     CHECKERROR(i);
                     READ(i, 0x1a0b, 0, buf8, "OpMode Display");
 
+                    WRITE(i, 0x4602, 0, buf32, 1, "Release Brake");
+                    usleep(100000);
+                    READ(i, 0x4602, 0, buf32, "Read Release Brake");
+
                     READ(i, 0x1001, 0, buf8, "Error");
                 }
                 int reachedInitial = 0;
-                int reachedInitial2 = 0;
 
                 /* cyclic loop for two slaves*/
                 target = (struct TorqueOut *)(ec_slave[1].outputs);
                 val = (struct TorqueIn *)(ec_slave[1].inputs);
-
-                target2 = (struct TorqueOut *)(ec_slave[2].outputs);
-                val2 = (struct TorqueIn *)(ec_slave[2].inputs);
 
                 for (i = 1; i <= 4000; i++)
                 {
@@ -289,29 +286,7 @@ void simpletest(char *ifname)
                                 target->status = 128;
                             }
                         }
-
-                        // Slave 2
-                        switch (target2->status)
-                        {
-                        case 0:
-                            target2->status = 6;
-                            break;
-                        case 6:
-                            target2->status = 7;
-                            break;
-                        case 7:
-                            target2->status = 15;
-                            break;
-                        case 128:
-                            target2->status = 0;
-                            break;
-                        default:
-                            if (val2->status >> 3 & 0x01)
-                            {
-                                READ(2, 0x1001, 0, buf8, "Error");
-                                target2->status = 128;
-                            }
-                        }
+                        
 
                         /** we wait to be in ready-to-run mode and with initial value reached */
                         if (reachedInitial == 0 /*&& val->position == INITIAL_POS */ && (val->status & 0x0fff) == 0x0237)
@@ -319,19 +294,9 @@ void simpletest(char *ifname)
                             reachedInitial = 1;
                         }
 
-                        if (reachedInitial2 == 0 /*&& val->position == INITIAL_POS */ && (val2->status & 0x0fff) == 0x0237)
-                        {
-                            reachedInitial2 = 1;
-                        }
-
                         if ((val->status & 0x0fff) == 0x0237 && reachedInitial)
                         {
                             target->torque = (int16)(sin(i / 100.) * (1000));
-                        }
-
-                        if ((val2->status & 0x0fff) == 0x0237 && reachedInitial2)
-                        {
-                            target2->torque = (int16)(sin(i / 100.) * (1000));
                         }
 
                         printf("  Target: 0x%x, control: 0x%x", target->torque, target->status);
