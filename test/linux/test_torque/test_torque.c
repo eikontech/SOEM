@@ -289,14 +289,14 @@ void simpletest(char *ifname)
                         
 
                         /** we wait to be in ready-to-run mode and with initial value reached */
-                        if (reachedInitial == 0 /*&& val->position == INITIAL_POS */ && (val->status & 0x0fff) == 0x0237)
+                        if (reachedInitial == 0 /*&& val->position == INITIAL_POS */ && (val->status & 0x0fff) == 0x0637)
                         {
                             reachedInitial = 1;
                         }
 
-                        if ((val->status & 0x0fff) == 0x0237 && reachedInitial)
+                        if ((val->status & 0x0fff) == 0x0637 && reachedInitial)
                         {
-                            target->torque = (int16)(sin(i / 100.) * (1000));
+                            target->torque = (int16)(sin(i / 100.) * (500));
                         }
 
                         printf("  Target: 0x%x, control: 0x%x", target->torque, target->status);
