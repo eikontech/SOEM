@@ -74,8 +74,8 @@ void simpletest(char *ifname)
     uint16 buf16;
     uint8 buf8;
 
-    struct TorqueIn *val;
-    struct TorqueOut *target;
+    struct TorqueIn *val1;
+    struct TorqueOut *target1;
 
     printf("Starting simple test\n");
 
@@ -120,6 +120,11 @@ void simpletest(char *ifname)
             {
                 os = sizeof(ob2);
                 ob2 = 0x16020001;
+                // equivalente alla chiamata WRITE ma con TRUE -> attiva complete access
+                // scrive 0001 in 1c12/0 e 1602 in 1c12/1
+                // dovrebbe essere equivalente a:
+                // WRITE(i, 0x1c12, 0, buf8, 0x0001, "OpMode");
+                // WRITE(i, 0x1c12, 1, buf8, 0x1602, "OpMode");
                 ec_SDOwrite(i, 0x1c12, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
                 os = sizeof(ob2);
                 ob2 = 0x1a020001;
@@ -146,11 +151,12 @@ void simpletest(char *ifname)
             /** disable heartbeat alarm */
             for (int i = 1; i <= ec_slavecount; i++)
             {
-                READ(i, 0x10F1, 2, buf32, "Heartbeat?");
-                WRITE(i, 0x10F1, 2, buf32, 1, "Heartbeat");
+                READ(i, 0x10F1, 2, buf32, "Heartbeat?");        // 0x10F1/2: SYNC Monitor setup - forse Sync Error counter limit, oltre il quale lo slave deve cabiare lo stato EtherCAT a SAFEOP.
+                WRITE(i, 0x10F1, 2, buf32, 1, "Heartbeat");     // lo slave deve resettare il contatore quando viene di nuovo sincronizzato.
 
-                WRITE(i, 0x60c2, 1, buf8, 2, "Time period");
-                WRITE(i, 0x2f75, 0, buf16, 2, "Interpolation timeout");
+                WRITE(i, 0x60c2, 1, buf8, 2, "Time period");        // Interpolation time cycle - 0: Number of entries, 1: Interpolation time period, 2: Interpolation time index 
+                                                                    // cycle = period * (10^index) secondi. Mon sappiamo il default dell'index)
+                WRITE(i, 0x2f75, 0, buf16, 2, "Interpolation timeout");     // Extrapolation Cycles Timeout - 
             }
 
             printf("Slaves mapped, state to SAFE_OP.\n");
@@ -193,7 +199,7 @@ void simpletest(char *ifname)
 
             /* request OP state for all slaves */
             ec_writestate(0);
-            chk = 40;
+            chk = 40    ;
             /* wait for all slaves to reach OP state */
             do
             {
@@ -249,10 +255,10 @@ void simpletest(char *ifname)
                 int reachedInitial = 0;
 
                 /* cyclic loop for two slaves*/
-                target = (struct TorqueOut *)(ec_slave[1].outputs);
-                val = (struct TorqueIn *)(ec_slave[1].inputs);
+                target1 = (struct TorqueOut *)(ec_slave[1].outputs);
+                val1 = (struct TorqueIn *)(ec_slave[1].inputs);
 
-                for (i = 1; i <= 4000; i++)
+                for (i = 1; i <= 1000; i++)
                 {
                     /** PDO I/O refresh */
                     ec_send_processdata();
@@ -261,45 +267,67 @@ void simpletest(char *ifname)
                     if (wkc >= expectedWKC)
                     {
                         printf("Processdata cycle %4d, WKC %d,", i, wkc);
-                        printf("  pos: 0x%x, tor: 0x%x, stat: 0x%x, mode: 0x%x", val->position, val->torque, val->status, val->profile);
+                        printf("  pos: 0x%x, tor: 0x%x, stat: 0x%x, mode: 0x%x", val1->position, val1->torque, val1->status, val1->profile);
 
                         /** if in fault or in the way to normal status, we update the state machine */
                         // slave 1
-                        switch (target->status)
-                        {
-                        case 0:
-                            target->status = 6;
-                            break;
-                        case 6:
-                            target->status = 7;
-                            break;
-                        case 7:
-                            target->status = 15;
-                            break;
-                        case 128:
-                            target->status = 0;
-                            break;
-                        default:
-                            if (val->status >> 3 & 0x01)
-                            {
-                                READ(1, 0x1001, 0, buf8, "Error");
-                                target->status = 128;
-                            }
+                        // switch (target->status)
+                        // {
+                        // case 0:
+                        //     target->status = 6;
+                        //     break;
+                        // case 6:
+                        //     target->status = 7;
+                        //     break;
+                        // case 7:
+                        //     target->status = 15;
+                        //     break;
+                        // case 128:
+                        //     target->status = 0;
+                        //     break;
+                        // default:
+                        //     if (val->status >> 3 & 0x01)
+                        //     {
+                        //         READ(1, 0x1001, 0, buf8, "Error");
+                        //         target->status = 128;
+                        //     }
+                        // }
+
+                        // val1->status = status word
+                        // target1->status = control word
+                        // guardo la maschera, vedo lo stato pag 20
+                        // guardo la transizione a pag 16
+                        // guardo la transizione in controlword.cpp
+                        // poi vado a rivederla a pag 27 (dell'altro) e capisco il numero da mettere
+                        if ((val1->status & 0b0000000001001111) == 0b0000000000000000) {         // Not ready to switch on
+                            printf("Error: transition Not Ready to Switch On => Switch On Disabled should be automatic"); 
                         }
-                        
+                        else if ((val1->status & 0b0000000001001111) == 0b0000000001000000) {  // Switch on disabled
+                            target1->status = 6U;        // transition 2
+                        }
+                        else if ((val1->status & 0b0000000001101111) == 0b0000000000100001) {  // Ready to switch on
+                            target1->status = 7U;        // transition 3
+                        }
+                        else if ((val1->status & 0b0000000001101111) == 0b0000000000100011) {  // Switched on
+                            target1->status = 15U;       // transition 4
+                        } 
+                        else if ((val1->status & 0b0000000001001000) == 0b0000000000001000) {  // Fault + Fault reaction active
+                            READ(1, 0x1001, 0, buf8, "Error");
+                            target1->status = 128U;      // transition 15
+                        }
 
                         /** we wait to be in ready-to-run mode and with initial value reached */
-                        if (reachedInitial == 0 /*&& val->position == INITIAL_POS */ && (val->status & 0x0fff) == 0x0637)
+                        // if (reachedInitial == 0 /*&& val->position == INITIAL_POS */ && (val1->status & 0x0fff) == 0x0637)
+                        // {
+                        //     reachedInitial = 1;
+                        // }
+
+                        if ((val1->status & 0b0000000001101111) == 0b0000000000100111 /*&& reachedInitial*/)        // Operation enabled
                         {
-                            reachedInitial = 1;
+                            target1->torque = (int16)(sin(i / 100.) * (500));
                         }
 
-                        if ((val->status & 0x0fff) == 0x0637 && reachedInitial)
-                        {
-                            target->torque = (int16)(sin(i / 100.) * (500));
-                        }
-
-                        printf("  Target: 0x%x, control: 0x%x", target->torque, target->status);
+                        printf("  Target: 0x%x, control: 0x%x", target1->torque, target1->status);
 
                         printf("\r");
                         needlf = TRUE;
@@ -307,6 +335,7 @@ void simpletest(char *ifname)
                     usleep(timestep);
                 }
                 inOP = FALSE;
+                // WRITE(i, 0x1c12, 1, buf8, 0x1602, "OpMod
             }
             else
             {
