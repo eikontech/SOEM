@@ -26,17 +26,17 @@ volatile int wkc;
 boolean inOP;
 uint8 currentgroup = 0;
 
-struct TorqueOut
-{
-    uint16 torque;
-    uint16 status;
-};
-struct TorqueIn
+struct PositionOut
 {
     int32 position;
-    int16 torque;
+    int32 input;
     uint16 status;
-    int8 profile;
+};
+struct PositionIn
+{
+    int32 position;
+    int32 input;
+    uint16 status;
 };
 
 /**
@@ -74,10 +74,10 @@ void simpletest(char *ifname)
     uint16 buf16;
     uint8 buf8;
 
-    struct TorqueIn *val1;
-    struct TorqueOut *target1;
+    struct PositionIn *val1;
+    struct PositionOut *target1;
 
-    printf("Starting torque test\n");
+    printf("Starting position test\n");
 
     /* initialise SOEM, bind socket to ifname */
     if (ec_init(ifname))
@@ -104,7 +104,7 @@ void simpletest(char *ifname)
             /** opMode: 8  => Position profile */
             for (int i = 1; i <= ec_slavecount; i++)
             {
-                WRITE(i, 0x6060, 0, buf8, 10, "OpMode");
+                WRITE(i, 0x6060, 0, buf8, 8, "OpMode");     // Operation mode position
                 READ(i, 0x6061, 0, buf8, "OpMode display");
 
                 READ(i, 0x1c12, 0, buf32, "rxPDO:0");
@@ -119,15 +119,15 @@ void simpletest(char *ifname)
             for (int i = 1; i <= ec_slavecount; i++)
             {
                 os = sizeof(ob2);
-                ob2 = 0x16020001;
+                ob2 = 0x16000001;
                 // equivalente alla chiamata WRITE ma con TRUE -> attiva complete access
                 // scrive 0001 in 1c12/0 e 1602 in 1c12/1
                 // dovrebbe essere equivalente a:
                 // WRITE(i, 0x1c12, 0, buf8, 0x0001, "OpMode");
-                // WRITE(i, 0x1c12, 1, buf8, 0x1602, "OpMode");
+                // WRITE(i, 0x1c12, 1, buf8, 0x1600, "OpMode");
                 ec_SDOwrite(i, 0x1c12, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
                 os = sizeof(ob2);
-                ob2 = 0x1a020001;
+                ob2 = 0x1a000001;
                 ec_SDOwrite(i, 0x1c13, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
 
                 READ(i, 0x1c12, 0, buf32, "rxPDO:0");
@@ -255,10 +255,10 @@ void simpletest(char *ifname)
                 // int reachedInitial = 0;
 
                 /* cyclic loop for two slaves*/
-                target1 = (struct TorqueOut *)(ec_slave[1].outputs);
-                val1 = (struct TorqueIn *)(ec_slave[1].inputs);
+                target1 = (struct PositionOut *)(ec_slave[1].outputs);
+                val1 = (struct PositionIn *)(ec_slave[1].inputs);
 
-                for (i = 1; i <= 1000; i++)
+                for (i = 1; i <= 10000; i++)
                 {
                     /** PDO I/O refresh */
                     ec_send_processdata();
@@ -267,7 +267,7 @@ void simpletest(char *ifname)
                     if (wkc >= expectedWKC)
                     {
                         printf("Processdata cycle %4d, WKC %d,", i, wkc);
-                        printf("  pos: 0x%x, tor: 0x%x, stat: 0x%x, mode: 0x%x", val1->position, val1->torque, val1->status, val1->profile);
+                        printf("  pos: 0x%x, in: 0x%x, stat: 0x%x", val1->position, val1->input, val1->status);
 
                         /** if in fault or in the way to normal status, we update the state machine */
                         // slave 1
@@ -324,10 +324,14 @@ void simpletest(char *ifname)
 
                         if ((val1->status & 0b0000000001101111) == 0b0000000000100111 /*&& reachedInitial*/)        // Operation enabled
                         {
-                            target1->torque = (int16)(sin(i / 100.) * (500));
+                            //target1->torque = (int16)(sin(i / 100.) * (500));
+                            if(i%1000 == 0) {
+                                //target1->position += 500000;
+                            }
                         }
 
-                        printf("  Target: 0x%x, control: 0x%x", target1->torque, target1->status);
+                        printf("  Target pos: 0x%x, in: 0x%x, control: 0x%x\n", target1->position, target1->input, target1->status);
+                        printf("  Val pos: 0x%x, in: 0x%x, control: 0x%x\n", val1->position, val1->input, val1->status);
 
                         printf("\r");
                         needlf = TRUE;
@@ -335,7 +339,6 @@ void simpletest(char *ifname)
                     usleep(timestep);
                 }
                 inOP = FALSE;
-                // WRITE(i, 0x1c12, 1, buf8, 0x1602, "OpMod
             }
             else
             {
@@ -467,6 +470,6 @@ int main(int argc, char *argv[])
         printf("Usage: simple_test ifname1\nifname = eth0 for example\n");
     }
 
-    printf("End program torque test\n");
+    printf("End program position test\n");
     return (0);
 }
