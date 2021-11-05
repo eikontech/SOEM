@@ -34,8 +34,8 @@ struct SpeedOut
 struct SpeedIn
 {
     int32 position;
+    uint32 input;
     int32 speed;
-    int16 torque;
     uint16 status;
 };
 
@@ -127,7 +127,7 @@ void simpletest(char *ifname)
                 // WRITE(i, 0x1c12, 1, buf8, 0x1600, "OpMode");
                 ec_SDOwrite(i, 0x1c12, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
                 os = sizeof(ob2);
-                ob2 = 0x1a010001;
+                ob2 = 0x1a030001;
                 ec_SDOwrite(i, 0x1c13, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
 
                 READ(i, 0x1c12, 0, buf32, "rxPDO:0");
@@ -269,7 +269,7 @@ void simpletest(char *ifname)
                     if (wkc >= expectedWKC)
                     {
                         printf("Processdata cycle %4d, WKC %d,", i, wkc);
-                        printf("  pos: 0x%x, speed: 0x%x, torque: 0x%x, stat: 0x%x", val1->position, val1->speed, val1->torque, val1->status);
+                        printf("  pos: 0x%x, input: 0x%x, speed: 0x%x, stat: 0x%x", val1->position, val1->input, val1->speed, val1->status);
 
                         /** if in fault or in the way to normal status, we update the state machine */
                         // slave 1
@@ -335,7 +335,7 @@ void simpletest(char *ifname)
                         }
 
                         printf("  Target speed: 0x%x, control: 0x%x\n", target1->speed, target1->status);
-                        printf("  Val pos: 0x%x, speed: 0x%x, torque: 0x%x, control: 0x%x\n", val1->position, val1->speed, val1->torque, val1->status);
+                        printf("  Val pos: 0x%x, input: 0x%x, speed: 0x%x, stat: 0x%x", val1->position, val1->input, val1->speed, val1->status);
 
                         printf("\r");
                         needlf = TRUE;
