@@ -29,13 +29,13 @@ uint8 currentgroup = 0;
 struct PositionOut
 {
     int32 position;
-    int32 input;
+    uint32 input;
     uint16 status;
 };
 struct PositionIn
 {
     int32 position;
-    int32 input;
+    uint32 input;
     uint16 status;
 };
 
@@ -324,9 +324,8 @@ void simpletest(char *ifname)
 
                         if ((val1->status & 0b0000000001101111) == 0b0000000000100111 /*&& reachedInitial*/)        // Operation enabled
                         {
-                            //target1->torque = (int16)(sin(i / 100.) * (500));
                             if(i%1000 == 0) {
-                                //target1->position += 500000;
+                                target1->position += 500000;
                             }
                         }
 
