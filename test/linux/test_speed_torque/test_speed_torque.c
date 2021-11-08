@@ -26,18 +26,26 @@ volatile int wkc;
 boolean inOP;
 uint8 currentgroup = 0;
 
-struct SpeedOut
-{
-    int32 speed;
-    uint16 status;
-};
-struct SpeedIn
+
+struct SpeedTorqueOut
 {
     int32 position;
-    uint32 input;
     int32 speed;
+    int16 torque;
+    int16 maxTorque;
     uint16 status;
+    int8 operation;
 };
+struct SpeedTorqueIn
+{
+    uint16 error;
+    uint16 status;
+    int32 position;
+    int32 speed;
+    int16 torque;
+    int8 operation;
+};
+
 
 /**
  * helper macros
@@ -74,8 +82,8 @@ void simpletest(char *ifname)
     uint16 buf16;
     uint8 buf8;
 
-    struct SpeedIn *val1;
-    struct SpeedOut *target1;
+    struct SpeedTorqueIn *val1;
+    struct SpeedTorqueOut *target1;
 
     printf("Starting speed test\n");
 
@@ -119,15 +127,10 @@ void simpletest(char *ifname)
             for (int i = 1; i <= ec_slavecount; i++)
             {
                 os = sizeof(ob2);
-                ob2 = 0x16010001;
-                // equivalente alla chiamata WRITE ma con TRUE -> attiva complete access
-                // scrive 0001 in 1c12/0 e 1602 in 1c12/1
-                // dovrebbe essere equivalente a:
-                // WRITE(i, 0x1c12, 0, buf8, 0x0001, "OpMode");
-                // WRITE(i, 0x1c12, 1, buf8, 0x1600, "OpMode");
+                ob2 = 0x16050001;
                 ec_SDOwrite(i, 0x1c12, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
                 os = sizeof(ob2);
-                ob2 = 0x1a030001;
+                ob2 = 0x1a060001;
                 ec_SDOwrite(i, 0x1c13, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
 
                 READ(i, 0x1c12, 0, buf32, "rxPDO:0");
@@ -257,8 +260,8 @@ void simpletest(char *ifname)
                 // int reachedInitial = 0;
 
                 /* cyclic loop for two slaves*/
-                target1 = (struct SpeedOut *)(ec_slave[1].outputs);
-                val1 = (struct SpeedIn *)(ec_slave[1].inputs);
+                target1 = (struct SpeedTorqueOut *)(ec_slave[1].outputs);
+                val1 = (struct SpeedTorqueIn *)(ec_slave[1].inputs);
 
                 for (i = 1; i <= 10000; i++)
                 {
@@ -269,38 +272,8 @@ void simpletest(char *ifname)
                     if (wkc >= expectedWKC)
                     {
                         printf("Processdata cycle %4d, WKC %d,", i, wkc);
-                        printf("  pos: 0x%x, input: 0x%x, speed: 0x%x, stat: 0x%x", val1->position, val1->input, val1->speed, val1->status);
+                        printf("  err: 0x%x, status: 0x%x, pos: 0x%x, speed: 0x%x, torque: 0x%x, operation: 0x%x\n", val1->error, val1->status, val1->position, val1->speed, val1->torque, val1->operation);
 
-                        /** if in fault or in the way to normal status, we update the state machine */
-                        // slave 1
-                        // switch (target->status)
-                        // {
-                        // case 0:
-                        //     target->status = 6;
-                        //     break;
-                        // case 6:
-                        //     target->status = 7;
-                        //     break;
-                        // case 7:
-                        //     target->status = 15;
-                        //     break;
-                        // case 128:
-                        //     target->status = 0;
-                        //     break;
-                        // default:
-                        //     if (val->status >> 3 & 0x01)
-                        //     {
-                        //         READ(1, 0x1001, 0, buf8, "Error");
-                        //         target->status = 128;
-                        //     }
-                        // }
-
-                        // val1->status = status word
-                        // target1->status = control word
-                        // guardo la maschera, vedo lo stato pag 20
-                        // guardo la transizione a pag 16
-                        // guardo la transizione in controlword.cpp
-                        // poi vado a rivederla a pag 27 (dell'altro) e capisco il numero da mettere
                         if ((val1->status & 0b0000000001001111) == 0b0000000000000000) {         // Not ready to switch on
                             printf("Error: transition Not Ready to Switch On => Switch On Disabled should be automatic"); 
                         }
@@ -330,9 +303,8 @@ void simpletest(char *ifname)
                                 target1->speed += i/10;
                             }
                         }
-
-                        printf("  Target speed: 0x%x, control: 0x%x\n", target1->speed, target1->status);
-                        printf("  Val pos: 0x%x, input: 0x%x, speed: 0x%x, stat: 0x%x", val1->position, val1->input, val1->speed, val1->status);
+                        printf("  Target err: 0x%x, status: 0x%x, pos: 0x%x, speed: 0x%x, torque: 0x%x, operation: 0x%x\n", val1->error, val1->status, val1->position, val1->speed, val1->torque, val1->operation);
+                        printf("  Val pos: 0x%x, speed: 0x%x, torque: 0x%x, maxTorque: 0x%x, status: 0x%x, operation: 0x%x\n", target1->position, target1->speed, target1->torque, target1->maxTorque, target1->status, target1->operation);
 
                         printf("\r");
                         needlf = TRUE;
