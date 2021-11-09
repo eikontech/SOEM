@@ -27,15 +27,27 @@ boolean inOP;
 uint8 currentgroup = 0;
 
 
+// struct SpeedTorqueOut
+// {
+//     int32 position;
+//     int32 speed;
+//     int16 torque;
+//     int16 maxTorque;
+//     uint16 status;
+//     int8 operation;
+// };
+
 struct SpeedTorqueOut
 {
     int32 position;
+    int32 output;
     int32 speed;
-    int16 torque;
-    int16 maxTorque;
+    int32 speedoff;
+    int16 torqueoff;
     uint16 status;
-    int8 operation;
 };
+
+
 struct SpeedTorqueIn
 {
     uint16 error;
@@ -127,7 +139,7 @@ void simpletest(char *ifname)
             for (int i = 1; i <= ec_slavecount; i++)
             {
                 os = sizeof(ob2);
-                ob2 = 0x16050001;
+                ob2 = 0x16060001;
                 ec_SDOwrite(i, 0x1c12, 0, TRUE, os, &ob2, EC_TIMEOUTRXM);
                 os = sizeof(ob2);
                 ob2 = 0x1a060001;
@@ -263,6 +275,9 @@ void simpletest(char *ifname)
                 target1 = (struct SpeedTorqueOut *)(ec_slave[1].outputs);
                 val1 = (struct SpeedTorqueIn *)(ec_slave[1].inputs);
 
+
+                //target1->operation = 9;
+
                 for (i = 1; i <= 10000; i++)
                 {
                     /** PDO I/O refresh */
@@ -303,8 +318,9 @@ void simpletest(char *ifname)
                                 target1->speed += i/10;
                             }
                         }
-                        printf("  Target err: 0x%x, status: 0x%x, pos: 0x%x, speed: 0x%x, torque: 0x%x, operation: 0x%x\n", val1->error, val1->status, val1->position, val1->speed, val1->torque, val1->operation);
-                        printf("  Val pos: 0x%x, speed: 0x%x, torque: 0x%x, maxTorque: 0x%x, status: 0x%x, operation: 0x%x\n", target1->position, target1->speed, target1->torque, target1->maxTorque, target1->status, target1->operation);
+                        printf("  Target pos: 0x%x, out: 0x%x, speed: 0x%x, speedoff: 0x%x, torqueoff: 0x%x, status: 0x%x\n", target1->position, target1->output, target1->speed, target1->speedoff, target1->torqueoff, target1->status);
+                        // printf("  Target pos: 0x%x, speed: 0x%x, torque: 0x%x, maxTorque: 0x%x, stat: 0x%x, op: 0x%x\n", target1->position, target1->speed, target1->torque, target1->maxTorque, target1->status, target1->operation);
+                        printf("  Val pos: 0x%x, speed: 0x%x, torque: 0x%x, maxTorque: 0x%x, status: 0x%x, operation: 0x%x\n", val1->error, val1->status, val1->position, val1->speed, val1->torque, val1->operation);
 
                         printf("\r");
                         needlf = TRUE;
@@ -312,7 +328,7 @@ void simpletest(char *ifname)
                     usleep(timestep);
                 }
                 usleep(100000);
-                inOP = FALSE;
+
             }
             else
             {
