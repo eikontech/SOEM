@@ -258,7 +258,7 @@ void simpletest(char *ifname)
                 target1 = (struct TorqueOut *)(ec_slave[1].outputs);
                 val1 = (struct TorqueIn *)(ec_slave[1].inputs);
 
-                for (i = 1; i <= 4000; i++)
+                for (i = 1; i <= 10000; i++)
                 {
                     /** PDO I/O refresh */
                     ec_send_processdata();
@@ -334,6 +334,7 @@ void simpletest(char *ifname)
                     }
                     usleep(timestep);
                 }
+                usleep(100000);
                 inOP = FALSE;
                 // WRITE(i, 0x1c12, 1, buf8, 0x1602, "OpMod
             }
