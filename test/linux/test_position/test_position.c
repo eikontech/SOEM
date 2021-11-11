@@ -131,26 +131,6 @@ void simpletest(char *ifname)
             if (ec_slave[0].state == EC_STATE_OPERATIONAL) {
                 inOP = TRUE;
                 for (int i = 1; i <= ec_slavecount; i++) {
-                    READ(i, 0x6041, 0, buf16, "*status word*");
-                    if (buf16 == 0x218) {
-                        WRITE(i, 0x6040, 0, buf16, 128, "*control word*");
-                        usleep(100000);
-                        READ(i, 0x6041, 0, buf16, "*status word*");
-                    }
-                    WRITE(i, 0x6040, 0, buf16, 0, "*control word*");
-                    usleep(100000);
-                    READ(i, 0x6041, 0, buf16, "*status word*");
-                    WRITE(i, 0x6040, 0, buf16, 6, "*control word*");
-                    usleep(100000);
-                    READ(i, 0x6041, 0, buf16, "*status word*");
-                    WRITE(i, 0x6040, 0, buf16, 7, "*control word*");
-                    usleep(100000);
-                    READ(i, 0x6041, 0, buf16, "*status word*");
-                    WRITE(i, 0x6040, 0, buf16, 15, "*control word*");
-                    usleep(100000);
-                    READ(i, 0x6041, 0, buf16, "*status word*");
-                    CHECKERROR(i);
-                    READ(i, 0x1a0b, 0, buf8, "OpMode Display");
                     WRITE(i, 0x4602, 0, buf32, 1, "Release Brake");
                     usleep(100000);
                     READ(i, 0x4602, 0, buf32, "Read Release Brake");
