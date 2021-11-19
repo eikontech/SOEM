@@ -79,7 +79,7 @@ void simpletest(char *ifname)
     inOP = FALSE;
 
     uint32 buf32;
-    uint16 buf16;
+    // uint16 buf16;
     uint8 buf8;
 
     struct SpeedTorqueIn *val1;
