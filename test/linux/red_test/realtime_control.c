@@ -46,7 +46,7 @@ uint8 currentgroup = 0;
 
 int operation_mode = 9;
 
-typedef struct 
+typedef struct
 {
    int32 position;
    int32 velocity;
@@ -56,7 +56,7 @@ typedef struct
    uint8 opMode;
 } ControlOut;
 
-typedef struct 
+typedef struct
 {
    uint16 errorCode;
    uint16 status;
@@ -120,26 +120,34 @@ void redtest(char *ifname)
             WRITE(slave, 0x6060, 0, buf8, operation_mode, "OpMode"); // Operation mode position
             READ(slave, 0x6061, 0, buf8, "OpMode display");
 
-            READ(slave, 0x6064, 0, buf32, "Read Actual Position");
-            osal_usleep(EC_TIMEOUTTXM);
-            int32_t actual_location = buf32;
-            char label[60];
-            sprintf(label, "Set Actual Position %d", actual_location);
-            WRITE(slave, 0x607A, 0, buf32, actual_location,label);
+            // WRITE(slave, 0x6081, 0, buf32, 100000, "Set Contour Speed");
+            // WRITE(slave, 0x6083, 0, buf32, 5566, "Set Profile Acceleration");
+            // WRITE(slave, 0x6084, 0, buf32, 5566, "Set profile Deceleration");
+
+            // READ(slave, 0x6081, 0, buf32, "Read Contour Speed");
+            // READ(slave, 0x6083, 0, buf32, "Read Profile Acceleration");
+            // READ(slave, 0x6084, 0, buf32, "Read profile Deceleration");
+
+            // READ(slave, 0x6064, 0, buf32, "Read Actual Position");
+            // osal_usleep(EC_TIMEOUTTXM);
+            // int32_t actual_location = buf32;
+            // char label[60];
+            // sprintf(label, "Set Actual Position %d", actual_location);
+            // WRITE(slave, 0x607A, 0, buf32, actual_location, label);
+            // osal_usleep(EC_TIMEOUTTXM);
+
+            WRITE(slave, 0x6081, 0, buf32, 100000, "Set Profile Velocity");
             osal_usleep(EC_TIMEOUTTXM);
 
-            WRITE(slave, 0x6081, 0, buf32, 50000,"Set Profile Velocity");
+            WRITE(slave, 0x6083, 0, buf32, 5566, "Set Profile Aceleration");
             osal_usleep(EC_TIMEOUTTXM);
 
-            WRITE(slave, 0x6083, 0, buf32, 50000,"Set Profile Aceleration");
+            WRITE(slave, 0x6084, 0, buf32, 5566, "Set Profile Deceleration");
             osal_usleep(EC_TIMEOUTTXM);
 
-            WRITE(slave, 0x6084, 0, buf32, 50000,"Set Profile Deceleration");
-            osal_usleep(EC_TIMEOUTTXM);
-
-            READ(slave, 0x607A, 0, buf32, "Read Actual Position");
-            READ(slave, 0x6064, 0, buf32, "Read Actual Position");
-            READ(slave, 0x6041, 0, buf8, "Read Actual Position");
+            READ(slave, 0x607A, 0, buf32, "Read Target Location");
+            READ(slave, 0x6064, 0, buf32, "Read Actual Location");
+            READ(slave, 0x6041, 0, buf8, "Read Status Word");
          }
 
          for (int slave = 1; slave <= ec_slavecount; slave++)
@@ -150,7 +158,6 @@ void redtest(char *ifname)
             osal_usleep(EC_TIMEOUTTXM);
             READ(slave, 0x1c12, 1, buf16, "read 1c12/1");
 
-
             READ(slave, 0x1605, 0, buf8, "read 1605")
             int elems = buf8;
             for (int j = 1; j <= elems; ++j)
@@ -160,7 +167,6 @@ void redtest(char *ifname)
                READ(slave, 0x1605, j, buf32, label);
             }
             READ(slave, 0x1c12, 1, buf16, "read 1c12/1");
-
 
             WRITE(slave, 0x1c13, 0, buf8, 0, "disable TX");
             WRITE(slave, 0x1c13, 1, buf32, 0x1a06, "assign 1A06");
@@ -345,10 +351,6 @@ OSAL_THREAD_FUNC_RT ecatthread(void *ptr)
    int ht;
    int64 cycletime;
 
-   uint32 buf32;
-   // uint16 buf16;
-   // uint8 buf8;
-
    clock_gettime(CLOCK_MONOTONIC, &ts);
    ht = (ts.tv_nsec / 1000000) + 1; /* round to nearest ms */
    ts.tv_nsec = ht * 1000000;
@@ -376,30 +378,31 @@ OSAL_THREAD_FUNC_RT ecatthread(void *ptr)
             //  && val && target)
             for (int slave = 1; slave <= ec_slavecount; slave++)
             {
-               if(val[slave] && target[slave])
+               if (val[slave] && target[slave])
                {
                   if ((val[slave]->status & 0b0000000001001111) == 0b0000000000000000)
                   { // Not ready to switch on
                      printf("Error: transition Not Ready to Switch On => Switch On Disabled should be automatic, %d.\n", val[slave]->status);
                   }
                   else if ((val[slave]->status & 0b0000000001001111) == 0b0000000001000000)
-                  {                         // Switch on disabled
+                  { // Switch on disabled
                      // printf("Switch on disabled, %d.\n", val[slave]->status);
                      target[slave]->control = 6U; // transition 2
                   }
                   else if ((val[slave]->status & 0b0000000001101111) == 0b0000000000100001)
-                  {                         // Ready to switch on
+                  { // Ready to switch on
                      // printf("Ready to switch on, %d.\n", val[slave]->status);
                      target[slave]->control = 7U; // transition 3
                   }
                   else if ((val[slave]->status & 0b0000000001101111) == 0b0000000000100011)
-                  {                          // Switched on
+                  { // Switched on
                      // printf("Switched on, %d.\n", val[slave]->status);
                      target[slave]->control = 15U; // transition 4
                   }
                   else if ((val[slave]->status & 0b0000000001001000) == 0b0000000000001000)
                   { // Fault + Fault reaction active
                      // READ(1, 0x1001, 0, buf8, "Error");
+                     int buf32;
                      READ(1, 0x1003, 0, buf32, "# of Error");
                      int max_err = buf32;
                      for (int j = 1; j <= max_err; ++j)
@@ -421,21 +424,21 @@ OSAL_THREAD_FUNC_RT ecatthread(void *ptr)
                   {
                      target[slave]->position = 50000;
                      target[slave]->position *= blink ? -1 : 1;
-                     
-                     if(operation_mode == 8)
+
+                     if (operation_mode == 8)
                      {
                         int error = target[slave]->position - val[slave]->position;
-                        if(abs(error) < 50)
+                        if (abs(error) < 50)
                         {
                            error_cumulative = 0;
                            target[slave]->velocity = 0;
                         }
                         else
                         {
-                           target[slave]->velocity = kp*error + ki*error_cumulative;
+                           target[slave]->velocity = kp * error + ki * error_cumulative;
                            error_cumulative += error;
-                           if(abs(target[slave]->velocity) > 100000)
-                              target[slave]->velocity = target[slave]->velocity>0? 100000 : -100000;
+                           if (abs(target[slave]->velocity) > 100000)
+                              target[slave]->velocity = target[slave]->velocity > 0 ? 100000 : -100000;
                         }
                      }
                      else
@@ -445,17 +448,20 @@ OSAL_THREAD_FUNC_RT ecatthread(void *ptr)
                      }
 
                      target[slave]->torque = 250;
-                     target[slave]->torque *= blink ? -1 : 1;
+                     // target[slave]->torque *= blink ? -1 : 1;
 
                      if (counter % 10000 == 0)
                      {
                         blink = !blink;
                         printf("counter %d\n", counter);
                         printf("target:\tposition:\t%d,\t\tspeed:\t%d,\ttorque:\t%d,\topMode:\t%d\n",
-                              target[slave]->position, target[slave]->velocity, target[slave]->torque, target[slave]->opMode);
+                               target[slave]->position, target[slave]->velocity, target[slave]->torque, target[slave]->opMode);
+                        printf("actual:\tposition:\t%d,\tspeed:\t%d,\ttorque:\t%d,\topMode:\t%d\n",
+                               val[slave]->position, val[slave]->velocity, val[slave]->torque, val[slave]->modeDisplay);
+                        printf("Error code %d\n", val[slave]->errorCode);
                      }
                      // printf("actual:\tposition:\t%d,\tspeed:\t%d,\ttorque:\t%d,\topMode:\t%d\n",
-                     //       val[slave]->position, val[slave]->velocity, val[slave]->torque, val[slave]->modeDisplay);
+                     //        val[slave]->position, val[slave]->velocity, val[slave]->torque, val[slave]->modeDisplay);
                      // printf("Error code %d\n", val[slave]->errorCode);
                      // printf("counter %d, position: %d, speed: %d, torque: %d, opMode: %d\n",
                      //        counter, target1->position, target1->speed, target1->torque, target1->opMode);
