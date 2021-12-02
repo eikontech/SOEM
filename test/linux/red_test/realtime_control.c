@@ -44,8 +44,6 @@ volatile int wkc;
 boolean inOP;
 uint8 currentgroup = 0;
 
-int operation_mode = 9;
-
 typedef struct
 {
    int32 position;
@@ -54,6 +52,8 @@ typedef struct
    uint16 maxTorque;
    uint16 control;
    uint8 opMode;
+   // uint8 padding;
+   // uint16 torqueOffset;
 } ControlOut;
 
 typedef struct
@@ -64,6 +64,8 @@ typedef struct
    int32 velocity;
    int16 torque;
    uint8 modeDisplay;
+   // uint8 padding;
+   int16 current;
 } ControlIn;
 
 /**
@@ -85,8 +87,30 @@ typedef struct
       printf("Slave: %d - Write at 0x%04x:%d => wkc: %d; data: 0x%.*x\t{%s}\n", slaveId, idx, sub, __ret, __s, (unsigned int)buf, comment); \
    }
 
+int operation_mode = 9;
+#define INITIAL_POS 0
+#define INITIAL_VEL 0
+#define INITIAL_TOR 0
+
 ControlIn *val[EC_MAXSLAVE];
 ControlOut *target[EC_MAXSLAVE];
+int max_torque = 10;
+int max_current = 10;
+
+int normal_velocity = 200;
+int max_velocity = 5000;
+
+int location_limit = 200000;
+
+int default_position = INITIAL_POS;
+int default_velocity = INITIAL_VEL;
+int default_torque = INITIAL_TOR;
+int target_position = INITIAL_POS;
+int target_velocity = INITIAL_VEL;
+int target_torque = INITIAL_TOR;
+
+int motor_rated_current_mA = 0;
+int motor_rated_torque_mNm = 0;
 
 void redtest(char *ifname)
 {
@@ -119,7 +143,10 @@ void redtest(char *ifname)
          {
             WRITE(slave, 0x6060, 0, buf8, operation_mode, "OpMode"); // Operation mode position
             READ(slave, 0x6061, 0, buf8, "OpMode display");
+         }
 
+         for (int slave = 1; slave <= ec_slavecount; slave++)
+         {
             // WRITE(slave, 0x6081, 0, buf32, 100000, "Set Contour Speed");
             // WRITE(slave, 0x6083, 0, buf32, 5566, "Set Profile Acceleration");
             // WRITE(slave, 0x6084, 0, buf32, 5566, "Set profile Deceleration");
@@ -128,49 +155,82 @@ void redtest(char *ifname)
             // READ(slave, 0x6083, 0, buf32, "Read Profile Acceleration");
             // READ(slave, 0x6084, 0, buf32, "Read profile Deceleration");
 
-            // READ(slave, 0x6064, 0, buf32, "Read Actual Position");
+            READ(slave, 0x6064, 0, buf32, "Read Actual Position");
+            osal_usleep(EC_TIMEOUTTXM);
+            int32_t actual_location = buf32;
+            char label[60];
+            sprintf(label, "Set Actual Position %d", actual_location);
+            WRITE(slave, 0x607A, 0, buf32, actual_location, label);
+            osal_usleep(EC_TIMEOUTTXM);
+
+            READ(slave, 0x3000, 0, buf32, "Read Speed Loop integral upper limit");
+            osal_usleep(EC_TIMEOUTTXM);
+            // WRITE(slave, 0x3000, 0, buf32, 80000, "Set Speed Loop integral upper limit");
             // osal_usleep(EC_TIMEOUTTXM);
-            // int32_t actual_location = buf32;
-            // char label[60];
-            // sprintf(label, "Set Actual Position %d", actual_location);
-            // WRITE(slave, 0x607A, 0, buf32, actual_location, label);
+            // READ(slave, 0x3000, 0, buf32, "Read Speed Loop integral upper limit");
+
+            READ(slave, 0x607d, 0, buf32, "Read Location Limit/0");
+            READ(slave, 0x607d, 1, buf32, "Read Location Limit/1");
+            READ(slave, 0x607d, 2, buf32, "Read Location Limit/2");
+            location_limit = buf32;
+
+            // WRITE(slave, 0x607f, 0, buf32, 314572, "Set Maximum Velocity");
             // osal_usleep(EC_TIMEOUTTXM);
 
-            WRITE(slave, 0x6081, 0, buf32, 100000, "Set Profile Velocity");
+            // WRITE(slave, 0x6080, 0, buf32, 314572, "Set Maximum Motor Velocity");
+            // osal_usleep(EC_TIMEOUTTXM);
+
+            WRITE(slave, 0x6081, 0, buf32, 50000, "Set Profile Velocity");
             osal_usleep(EC_TIMEOUTTXM);
 
-            WRITE(slave, 0x6083, 0, buf32, 5566, "Set Profile Aceleration");
-            osal_usleep(EC_TIMEOUTTXM);
+            // WRITE(slave, 0x6083, 0, buf32, 262144, "Set Profile Aceleration");
+            // osal_usleep(EC_TIMEOUTTXM);
 
-            WRITE(slave, 0x6084, 0, buf32, 5566, "Set Profile Deceleration");
-            osal_usleep(EC_TIMEOUTTXM);
+            // WRITE(slave, 0x6084, 0, buf32, 262144, "Set Profile Deceleration");
+            // osal_usleep(EC_TIMEOUTTXM);
+
+            // WRITE(slave, 0x6075, 0, buf32, 10000, "Set Motor Rated Current [mA]");
+            READ(slave, 0x6075, 0, buf32, "Read Motor Rated Current [mA]");
+            motor_rated_current_mA = buf32 / 1000;
+            // WRITE(slave, 0x6076, 0, buf32, 10000, "Set Motor Rated Torque [mNm]");
+            READ(slave, 0x6076, 0, buf32, "Read Motor Rated Torque [mNm]");
+            motor_rated_torque_mNm = buf32 / 1000;
+            // osal_usleep(EC_TIMEOUTTXM);
+
+            READ(slave, 0x6081, 0, buf32, "Read Profile Velocity");
+            normal_velocity = buf32;
+            READ(slave, 0x607f, 0, buf32, "Read Maximum Velocity");
+            max_velocity = buf32;
 
             READ(slave, 0x607A, 0, buf32, "Read Target Location");
             READ(slave, 0x6064, 0, buf32, "Read Actual Location");
             READ(slave, 0x6041, 0, buf8, "Read Status Word");
+
+            WRITE(slave, 0x6072, 0, buf16, 1833, "Write Max Torque");
+            READ(slave, 0x6072, 0, buf16, "Read Max Torque");
+            max_torque = buf16 * motor_rated_current_mA;
+
+            WRITE(slave, 0x6073, 0, buf16, 1833, "Write Max Current");
+            READ(slave, 0x6073, 0, buf16, "Read Max Current");
+            max_current = buf16 * motor_rated_current_mA;
+
+            // WRITE(slave, 0x60B2, 0, buf16, 200, "Write Torque offset");
+            // WRITE(slave, 0x60B2, 0, buf16, 0, "Write Torque offset");
          }
 
          for (int slave = 1; slave <= ec_slavecount; slave++)
          {
+            // RX - target
             WRITE(slave, 0x1c12, 0, buf8, 0, "disable RX");
             WRITE(slave, 0x1c12, 1, buf16, 0x1605, "assign 1605");
+            // WRITE(slave, 0x1c12, 1, buf16, 0x1618, "assign 1618");
             WRITE(slave, 0x1c12, 0, buf8, 1, "enable RX");
-            osal_usleep(EC_TIMEOUTTXM);
-            READ(slave, 0x1c12, 1, buf16, "read 1c12/1");
 
-            READ(slave, 0x1605, 0, buf8, "read 1605")
-            int elems = buf8;
-            for (int j = 1; j <= elems; ++j)
-            {
-               char label[8];
-               sprintf(label, "field %d", j);
-               READ(slave, 0x1605, j, buf32, label);
-            }
-            READ(slave, 0x1c12, 1, buf16, "read 1c12/1");
-
+            // TX - val
             WRITE(slave, 0x1c13, 0, buf8, 0, "disable TX");
             WRITE(slave, 0x1c13, 1, buf32, 0x1a06, "assign 1A06");
-            WRITE(slave, 0x1c13, 0, buf8, 1, "enable TX");
+            WRITE(slave, 0x1c13, 2, buf32, 0x1a1f, "assign 1A1F");
+            WRITE(slave, 0x1c13, 0, buf8, 2, "enable TX");
          }
 
          ec_config_map(&IOmap);
@@ -340,16 +400,58 @@ void ec_sync(int64 reftime, int64 cycletime, int64 *offsettime)
    gl_delta = delta;
 }
 
-int error_cumulative = 0;
-int kp = 500;
-int ki = 70;
+double error_cumulative = 0;
+double kp = 0.5;
+double ki = 0.01;
+int blink = 0;
+
+int window = 250;
+double **values_position = NULL;
+double **values_velocity = NULL;
+double **values_torque = NULL;
+double **values_current = NULL;
+
+double *med_position = 0;
+double *med_velocity = 0;
+double *med_torque = 0;
+double *med_current = 0;
 
 /* RT EtherCAT thread */
 OSAL_THREAD_FUNC_RT ecatthread(void *ptr)
 {
+   /* File pointer to hold reference of input file */
+   FILE *fPtr_med;
+   FILE *fPtr_curr;
+   /* Input file path to remove empty lines from user */
+   char *filePath_med = "./out_med.txt";
+   char *filePath_curr = "./out_curr.txt";
+
+   /*  Open all file in append mode. */
+   fPtr_med = fopen(filePath_med, "w");
+   fPtr_curr = fopen(filePath_curr, "w");
+
+   /* fopen() return NULL if unable to open file in given mode. */
+   if (fPtr_med == NULL)
+   {
+      /* Unable to open file hence exit */
+      printf("\nUnable to open '%s' file.\n", filePath_med);
+      printf("Please check whether file exists and you have write privilege.\n");
+      exit(EXIT_FAILURE);
+   }
+
+   if (fPtr_curr == NULL)
+   {
+      /* Unable to open file hence exit */
+      printf("\nUnable to open '%s' file.\n", filePath_curr);
+      printf("Please check whether file exists and you have write privilege.\n");
+      exit(EXIT_FAILURE);
+   }
+
    struct timespec ts, tleft;
    int ht;
    int64 cycletime;
+   boolean *plotted;
+   boolean initialized = FALSE;
 
    clock_gettime(CLOCK_MONOTONIC, &ts);
    ht = (ts.tv_nsec / 1000000) + 1; /* round to nearest ms */
@@ -358,7 +460,6 @@ OSAL_THREAD_FUNC_RT ecatthread(void *ptr)
    toff = 0;
    dorun = 0;
    uint counter = 0;
-   int blink = 0;
 
    ec_send_processdata();
    while (1)
@@ -375,6 +476,41 @@ OSAL_THREAD_FUNC_RT ecatthread(void *ptr)
 
          if (wkc >= expectedWKC)
          {
+            if (!initialized)
+            {
+               values_position = calloc(ec_slavecount, sizeof(double *));
+               values_velocity = calloc(ec_slavecount, sizeof(double *));
+               values_torque = calloc(ec_slavecount, sizeof(double *));
+               values_current = calloc(ec_slavecount, sizeof(double *));
+
+               med_position = calloc(ec_slavecount, sizeof(double));
+               med_velocity = calloc(ec_slavecount, sizeof(double));
+               med_torque = calloc(ec_slavecount, sizeof(double));
+               med_current = calloc(ec_slavecount, sizeof(double));
+
+               plotted = calloc(ec_slavecount, sizeof(boolean));
+
+               for (int slave = 1; slave <= ec_slavecount; slave++)
+               {
+                  values_position[slave] = calloc(window, sizeof(double));
+                  values_velocity[slave] = calloc(window, sizeof(double));
+                  values_torque[slave] = calloc(window, sizeof(double));
+                  values_current[slave] = calloc(window, sizeof(double));
+               }
+
+               for (int slave = 1; slave <= ec_slavecount; slave++)
+               {
+                  for (int i = 0; i < window; ++i) // Set the first 6 elements in the array
+                  {
+                     values_position[slave][i] = 0;
+                     values_velocity[slave][i] = 0;
+                     values_torque[slave][i] = 0;
+                     values_current[slave][i] = 0;
+                  }
+               }
+               initialized = TRUE;
+            }
+
             //  && val && target)
             for (int slave = 1; slave <= ec_slavecount; slave++)
             {
@@ -422,49 +558,157 @@ OSAL_THREAD_FUNC_RT ecatthread(void *ptr)
 
                   if ((val[slave]->status & 0b0000000001101111) == 0b0000000000100111) // Operation enabled
                   {
-                     target[slave]->position = 50000;
+                     target[slave]->position = target_position;
                      target[slave]->position *= blink ? -1 : 1;
 
                      if (operation_mode == 8)
                      {
-                        int error = target[slave]->position - val[slave]->position;
-                        if (abs(error) < 50)
+                        double error = target[slave]->position - val[slave]->position;
+                        if (fabs(error) < 50)
                         {
                            error_cumulative = 0;
                            target[slave]->velocity = 0;
                         }
                         else
                         {
+                           if (fabs(error_cumulative) > 100000)
+                              error_cumulative = 0;
+
                            target[slave]->velocity = kp * error + ki * error_cumulative;
+                           // printf("error: %.0f, cumulative: %.0f\n", error, error_cumulative);
+                           // printf("target[slave]->velocity: %d\n", target[slave]->velocity);
                            error_cumulative += error;
-                           if (abs(target[slave]->velocity) > 100000)
-                              target[slave]->velocity = target[slave]->velocity > 0 ? 100000 : -100000;
+                           // target[slave]->velocity = 0;
+                           if (abs(target[slave]->velocity) > normal_velocity)
+                              target[slave]->velocity = target[slave]->velocity > 0 ? normal_velocity : -normal_velocity;
+                        }
+                     }
+                     else if (operation_mode == 9)
+                     {
+                        target[slave]->velocity = target_velocity;
+                        target[slave]->velocity *= blink ? -1 : 1;
+                     }
+                     else if (operation_mode == 10)
+                     {
+                        if (1)
+                        {
+                           double local_target_torque = target_torque;
+                           local_target_torque *= (blink ? -1 : 1);
+                           // target[slave]->velocity = max_velocity;
+
+                           double error = local_target_torque - val[slave]->torque;
+                           // double error = local_target_torque - med_torque;
+                           // if (fabs(error) < 5)
+                           // {
+                           //    printf("OCCHIO in target torque! error %.0f\n", error);
+                           //    error_cumulative = 0;
+                           //    target[slave]->torque = 0;
+                           // }
+                           // else
+                           {
+                              if (fabs(error_cumulative) > 1000)
+                                 error_cumulative = 0;
+
+                              target[slave]->torque = kp * error + ki * error_cumulative;
+
+                              // printf("error: %.0f, cumulative: %.0f\n", error, error_cumulative);
+                              // printf("Target torque not limited %d\n", target[slave]->torque);
+
+                              error_cumulative += error;
+                              // int compare_torque = target[slave]->torque > 32767 ? target[slave]->torque - 65535: target[slave]->torque;
+                              if (abs(target[slave]->torque) > 900)
+                                 target[slave]->torque = (target[slave]->torque) > 0 ? 900 : -900;
+
+                              // printf("Target torque limited %d\n", target[slave]->torque);
+                           }
+                        }
+                        else
+                        {
+                           target[slave]->velocity = max_velocity;
+                           target[slave]->torque = target_torque;
+                           target[slave]->torque *= blink ? -1 : 1;
+                           // target[slave]->torqueOffset = -9075;
+                        }
+                     }
+
+                     if (abs(val[slave]->position) > location_limit && operation_mode != 8)
+                     {
+                        target[slave]->velocity = 0;
+                        target[slave]->torque = 0;
+                        target_position = target[slave]->position > 0 ? location_limit : -location_limit;
+                        target_position = target_position / 2;
+                        target[slave]->opMode = 9;
+                        operation_mode = 8;
+                     }
+
+                     {
+                        // double current_current = val[slave]->current > 32767? val[slave]->current - 65535 :val[slave]->current;
+                        double current_current = val[slave]->current;
+
+                        med_position[slave] = med_position[slave] + 1. / window * (val[slave]->position - values_position[slave][0]);
+                        med_velocity[slave] = med_velocity[slave] + 1. / window * (val[slave]->velocity - values_velocity[slave][0]);
+                        med_torque[slave] = med_torque[slave] + 1. / window * (val[slave]->torque - values_torque[slave][0]);
+                        med_current[slave] = med_current[slave] + 1. / window * (current_current - values_current[slave][0]);
+
+                        /* Append data to file */
+                        char str[80];
+                        sprintf(str, "%d %d %.0f %.0f %.0f\n", slave, counter, med_torque[slave] * motor_rated_current_mA, med_current[slave] * motor_rated_current_mA, med_velocity[slave]);
+                        fputs(str, fPtr_med);
+                        sprintf(str, "%d %d %d %.f %d\n", slave, counter, val[slave]->torque * motor_rated_current_mA, current_current * motor_rated_current_mA, val[slave]->velocity);
+                        fputs(str, fPtr_curr);
+
+                        fflush(fPtr_med);  // To clear extra white space characters in file
+                        fflush(fPtr_curr); // To clear extra white space characters in file
+
+                        for (int i = 0; i < window - 1; ++i)
+                        {
+                           values_position[slave][i] = values_position[slave][i + 1];
+                           values_velocity[slave][i] = values_velocity[slave][i + 1];
+                           values_torque[slave][i] = values_torque[slave][i + 1];
+                           values_current[slave][i] = values_current[slave][i + 1];
+                        }
+
+                        values_position[slave][window - 1] = (double)val[slave]->position;
+                        values_velocity[slave][window - 1] = (double)val[slave]->velocity;
+                        values_torque[slave][window - 1] = (double)val[slave]->torque;
+                        values_current[slave][window - 1] = current_current;
+                     }
+
+                     if (((fabs(med_position[slave] - val[slave]->position) < 200 && operation_mode == 8) ||
+                        (fabs(med_velocity[slave] - val[slave]->velocity) < 3000 && operation_mode == 9) ||
+                        (fabs(med_torque[slave] - val[slave]->torque) * motor_rated_current_mA < 1000 && operation_mode == 10)))
+                     {
+                        if (!plotted[slave])
+                        {
+                           plotted[slave] = TRUE;
+                           printf("********** Slave %d Objective Reached at %d **************\n", slave, counter);
                         }
                      }
                      else
                      {
-                        target[slave]->velocity = 50000;
-                        target[slave]->velocity *= blink ? -1 : 1;
+                        // printf("********** Slave %d Objective NOT Reached at %d **************\n", slave, counter);
+                        plotted[slave] = FALSE;
                      }
 
-                     target[slave]->torque = 250;
-                     // target[slave]->torque *= blink ? -1 : 1;
-
-                     if (counter % 10000 == 0)
+                     if (counter % 10000 == 0 || 0)
                      {
-                        blink = !blink;
+                        printf("------------------------------------------------------------------------------\n");
+                        // blink = !blink;
+                        printf("Slave %d\n", slave);
                         printf("counter %d\n", counter);
-                        printf("target:\tposition:\t%d,\t\tspeed:\t%d,\ttorque:\t%d,\topMode:\t%d\n",
-                               target[slave]->position, target[slave]->velocity, target[slave]->torque, target[slave]->opMode);
-                        printf("actual:\tposition:\t%d,\tspeed:\t%d,\ttorque:\t%d,\topMode:\t%d\n",
-                               val[slave]->position, val[slave]->velocity, val[slave]->torque, val[slave]->modeDisplay);
+                        printf("target:\tposition:\t%d,\t\tspeed:\t%d,\ttorque:\t%d,\topMode:\t%d,\tcurrent:\t%d\n",
+                               target[slave]->position, target[slave]->velocity, target_torque * motor_rated_current_mA * (blink ? -1 : 1), target[slave]->opMode, target[slave]->torque * motor_rated_current_mA);
+                        printf("actual:\tposition:\t%d,\tspeed:\t%d,\ttorque:\t%d,\topMode:\t%d,\tcurrent:\t%d\n",
+                               val[slave]->position, val[slave]->velocity, val[slave]->torque * motor_rated_current_mA,
+                               val[slave]->modeDisplay,
+                               val[slave]->current * motor_rated_current_mA); //val[slave]->current > 32767? val[slave]->current - 65535 :val[slave]->current);
+                        printf("Medium:\tposition:\t%.0f,\tspeed:\t%.0f,\ttorque:\t%.0f,\topMode:\t%d,\tcurrent:\t%.0f\n",
+                               med_position[slave], med_velocity[slave], med_torque[slave] * motor_rated_current_mA,
+                               val[slave]->modeDisplay,
+                               med_current[slave] * motor_rated_current_mA);
                         printf("Error code %d\n", val[slave]->errorCode);
+                        // printf("************************************************************************\n");
                      }
-                     // printf("actual:\tposition:\t%d,\tspeed:\t%d,\ttorque:\t%d,\topMode:\t%d\n",
-                     //        val[slave]->position, val[slave]->velocity, val[slave]->torque, val[slave]->modeDisplay);
-                     // printf("Error code %d\n", val[slave]->errorCode);
-                     // printf("counter %d, position: %d, speed: %d, torque: %d, opMode: %d\n",
-                     //        counter, target1->position, target1->speed, target1->torque, target1->opMode);
                   }
                }
             }
@@ -484,6 +728,15 @@ OSAL_THREAD_FUNC_RT ecatthread(void *ptr)
          }
       }
    }
+
+   free(values_position); // Un-reserve the second array
+   free(values_velocity); // Un-reserve the second array
+   free(values_torque);   // Un-reserve the second array
+   free(values_current);  // Un-reserve the second array
+
+   /* Done with file, hence close file. */
+   fclose(fPtr_curr);
+   fclose(fPtr_med);
 }
 
 OSAL_THREAD_FUNC ecatcheck()
@@ -572,34 +825,54 @@ OSAL_THREAD_FUNC keyboardcheck()
       {
       case 1: // PP
          operation_mode = testInteger;
+         blink = !blink;
          printf("Profile Position Mode\n");
          break;
       case 3: // PV
          operation_mode = testInteger;
+         blink = !blink;
          printf("Profile Velocity Mode\n");
          break;
       case 4: // Torque
          operation_mode = testInteger;
+         blink = !blink;
          printf("Torque Mode\n");
          break;
       case 6: // Homing
          operation_mode = testInteger;
+         blink = !blink;
          printf("Homing Mode\n");
          break;
       case 7: // Interpolated position
          operation_mode = testInteger;
+         blink = !blink;
          printf("Interpolated Position Mode\n");
          break;
       case 8: // position
          operation_mode = testInteger;
+         blink = !blink;
+         target_position = target_position + 1000;
+         target_velocity = default_velocity;
+         target_torque = default_torque;
+         error_cumulative = 0;
          printf("Cyclic Sync Position Mode\n");
          break;
       case 9: // speed
          operation_mode = testInteger;
+         blink = !blink;
+         target_position = default_position;
+         target_velocity = target_velocity + 5000;
+         target_torque = default_torque;
+         error_cumulative = 0;
          printf("Cyclic Sync Velocity Mode\n");
          break;
       case 10: // torque
          operation_mode = testInteger;
+         blink = !blink;
+         target_position = default_position;
+         target_velocity = default_velocity;
+         target_torque = target_torque + 100;
+         error_cumulative = 0;
          printf("Cyclic Sync Torque Mode\n");
          break;
       default:
@@ -640,6 +913,8 @@ int main(int argc, char *argv[])
    }
 
    printf("End program\n");
+
+   osal_usleep(1000000);
 
    return (0);
 }
