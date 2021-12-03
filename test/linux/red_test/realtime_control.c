@@ -87,7 +87,7 @@ typedef struct
       printf("Slave: %d - Write at 0x%04x:%d => wkc: %d; data: 0x%.*x\t{%s}\n", slaveId, idx, sub, __ret, __s, (unsigned int)buf, comment); \
    }
 
-int operation_mode = 9;
+int operation_mode = 8;
 #define INITIAL_POS 0
 #define INITIAL_VEL 0
 #define INITIAL_TOR 0
@@ -161,7 +161,11 @@ void redtest(char *ifname)
             char label[60];
             sprintf(label, "Set Actual Position %d", actual_location);
             WRITE(slave, 0x607A, 0, buf32, actual_location, label);
+            target_position = actual_location + 10000;
             osal_usleep(EC_TIMEOUTTXM);
+
+            WRITE(slave, 0x3B60, 0, buf32, 50000, "Write Speed Follow Error Window");
+            // WRITE(slave, 0x6065, 0, buf32, 50000, "Write Position Follow Error Window");
 
             READ(slave, 0x3000, 0, buf32, "Read Speed Loop integral upper limit");
             osal_usleep(EC_TIMEOUTTXM);
@@ -178,16 +182,17 @@ void redtest(char *ifname)
             // osal_usleep(EC_TIMEOUTTXM);
 
             // WRITE(slave, 0x6080, 0, buf32, 314572, "Set Maximum Motor Velocity");
+            READ(slave, 0x6080, 0, buf32, "Set Maximum Motor Velocity");
             // osal_usleep(EC_TIMEOUTTXM);
 
             WRITE(slave, 0x6081, 0, buf32, 50000, "Set Profile Velocity");
             osal_usleep(EC_TIMEOUTTXM);
 
-            // WRITE(slave, 0x6083, 0, buf32, 262144, "Set Profile Aceleration");
-            // osal_usleep(EC_TIMEOUTTXM);
+            WRITE(slave, 0x6083, 0, buf32, 262144, "Set Profile Aceleration");
+            osal_usleep(EC_TIMEOUTTXM);
 
-            // WRITE(slave, 0x6084, 0, buf32, 262144, "Set Profile Deceleration");
-            // osal_usleep(EC_TIMEOUTTXM);
+            WRITE(slave, 0x6084, 0, buf32, 262144, "Set Profile Deceleration");
+            osal_usleep(EC_TIMEOUTTXM);
 
             // WRITE(slave, 0x6075, 0, buf32, 10000, "Set Motor Rated Current [mA]");
             READ(slave, 0x6075, 0, buf32, "Read Motor Rated Current [mA]");
@@ -216,6 +221,9 @@ void redtest(char *ifname)
 
             // WRITE(slave, 0x60B2, 0, buf16, 200, "Write Torque offset");
             // WRITE(slave, 0x60B2, 0, buf16, 0, "Write Torque offset");
+
+            // WRITE(slave, 0x200A, 3, buf32, 50000, "Write Motor Blocking Speed");
+
          }
 
          for (int slave = 1; slave <= ec_slavecount; slave++)
@@ -551,9 +559,9 @@ OSAL_THREAD_FUNC_RT ecatthread(void *ptr)
                      target[slave]->control = 128U; // transition 15
                   }
 
-                  if (operation_mode == 8)
-                     target[slave]->opMode = 9;
-                  else
+                  // if (operation_mode == 8)
+                  //    target[slave]->opMode = 9;
+                  // else
                      target[slave]->opMode = operation_mode;
 
                   if ((val[slave]->status & 0b0000000001101111) == 0b0000000000100111) // Operation enabled
@@ -563,24 +571,27 @@ OSAL_THREAD_FUNC_RT ecatthread(void *ptr)
 
                      if (operation_mode == 8)
                      {
-                        double error = target[slave]->position - val[slave]->position;
-                        if (fabs(error) < 50)
+                        if(0)
                         {
-                           error_cumulative = 0;
-                           target[slave]->velocity = 0;
-                        }
-                        else
-                        {
-                           if (fabs(error_cumulative) > 100000)
+                           double error = target[slave]->position - val[slave]->position;
+                           if (fabs(error) < 50)
+                           {
                               error_cumulative = 0;
+                              target[slave]->velocity = 0;
+                           }
+                           else
+                           {
+                              if (fabs(error_cumulative) > 100000)
+                                 error_cumulative = 0;
 
-                           target[slave]->velocity = kp * error + ki * error_cumulative;
-                           // printf("error: %.0f, cumulative: %.0f\n", error, error_cumulative);
-                           // printf("target[slave]->velocity: %d\n", target[slave]->velocity);
-                           error_cumulative += error;
-                           // target[slave]->velocity = 0;
-                           if (abs(target[slave]->velocity) > normal_velocity)
-                              target[slave]->velocity = target[slave]->velocity > 0 ? normal_velocity : -normal_velocity;
+                              target[slave]->velocity = kp * error + ki * error_cumulative;
+                              // printf("error: %.0f, cumulative: %.0f\n", error, error_cumulative);
+                              // printf("target[slave]->velocity: %d\n", target[slave]->velocity);
+                              error_cumulative += error;
+                              // target[slave]->velocity = 0;
+                              if (abs(target[slave]->velocity) > normal_velocity)
+                                 target[slave]->velocity = target[slave]->velocity > 0 ? normal_velocity : -normal_velocity;
+                           }
                         }
                      }
                      else if (operation_mode == 9)
@@ -859,7 +870,7 @@ OSAL_THREAD_FUNC keyboardcheck()
          break;
       case 9: // speed
          operation_mode = testInteger;
-         blink = !blink;
+         // blink = !blink;
          target_position = default_position;
          target_velocity = target_velocity + 5000;
          target_torque = default_torque;
