@@ -196,7 +196,7 @@ void simpletest(char *ifname)
                             for (int j = 1; j <= max_err; ++j)
                             {
                                 char label[8];
-                                sprintf(label, "Error %d", j);
+                                sprintf(label, "Error %hu", j);
                                 READ(1, 0x1003, j, buf32, label);
                             }
 

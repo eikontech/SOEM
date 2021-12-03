@@ -552,7 +552,7 @@ OSAL_THREAD_FUNC_RT ecatthread(void *ptr)
                      for (int j = 1; j <= max_err; ++j)
                      {
                         char label[8];
-                        sprintf(label, "Error %d", j);
+                        sprintf(label, "Error %hu", j);
                         READ(1, 0x1003, j, buf32, label);
                      }
 
@@ -830,7 +830,9 @@ OSAL_THREAD_FUNC keyboardcheck()
    while (1)
    {
       int testInteger;
-      scanf("%d", &testInteger);
+      int error = scanf("%d", &testInteger);
+      if(error == 0)
+         continue;
       printf("Operation Mode = %d -> ", testInteger);
       switch (testInteger)
       {
