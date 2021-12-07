@@ -87,7 +87,7 @@ typedef struct
       printf("Slave: %d - Write at 0x%04x:%d => wkc: %d; data: 0x%.*x\t{%s}\n", slaveId, idx, sub, __ret, __s, (unsigned int)buf, comment); \
    }
 
-int operation_mode = 8;
+int operation_mode = 9;
 #define INITIAL_POS 0
 #define INITIAL_VEL 0
 #define INITIAL_TOR 0
@@ -161,11 +161,11 @@ void redtest(char *ifname)
             char label[60];
             sprintf(label, "Set Actual Position %d", actual_location);
             WRITE(slave, 0x607A, 0, buf32, actual_location, label);
-            target_position = actual_location + 10000;
+            // target_position = actual_location + 10000;
             osal_usleep(EC_TIMEOUTTXM);
 
-            WRITE(slave, 0x3B60, 0, buf32, 50000, "Write Speed Follow Error Window");
-            // WRITE(slave, 0x6065, 0, buf32, 50000, "Write Position Follow Error Window");
+            WRITE(slave, 0x3B60, 0, buf32, 100000, "Write Speed Follow Error Window");
+            WRITE(slave, 0x6065, 0, buf32, 50000, "Write Position Follow Error Window");
 
             READ(slave, 0x3000, 0, buf32, "Read Speed Loop integral upper limit");
             osal_usleep(EC_TIMEOUTTXM);
@@ -559,9 +559,9 @@ OSAL_THREAD_FUNC_RT ecatthread(void *ptr)
                      target[slave]->control = 128U; // transition 15
                   }
 
-                  // if (operation_mode == 8)
-                  //    target[slave]->opMode = 9;
-                  // else
+                  if (operation_mode == 8)
+                     target[slave]->opMode = 9;
+                  else
                      target[slave]->opMode = operation_mode;
 
                   if ((val[slave]->status & 0b0000000001101111) == 0b0000000000100111) // Operation enabled
@@ -571,7 +571,7 @@ OSAL_THREAD_FUNC_RT ecatthread(void *ptr)
 
                      if (operation_mode == 8)
                      {
-                        if(0)
+                        if(1)
                         {
                            double error = target[slave]->position - val[slave]->position;
                            if (fabs(error) < 50)
@@ -872,7 +872,7 @@ OSAL_THREAD_FUNC keyboardcheck()
          break;
       case 9: // speed
          operation_mode = testInteger;
-         // blink = !blink;
+         blink = !blink;
          target_position = default_position;
          target_velocity = target_velocity + 5000;
          target_torque = default_torque;
