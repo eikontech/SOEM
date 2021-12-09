@@ -178,12 +178,12 @@ void redtest(char *ifname)
             READ(slave, 0x607d, 2, buf32, "Read Location Limit/2");
             location_limit = buf32;
 
-            // WRITE(slave, 0x607f, 0, buf32, 314572, "Set Maximum Velocity");
-            // osal_usleep(EC_TIMEOUTTXM);
+            WRITE(slave, 0x607f, 0, buf32, 314572, "Set Maximum Velocity");
+            osal_usleep(EC_TIMEOUTTXM);
 
             // WRITE(slave, 0x6080, 0, buf32, 314572, "Set Maximum Motor Velocity");
             READ(slave, 0x6080, 0, buf32, "Set Maximum Motor Velocity");
-            // osal_usleep(EC_TIMEOUTTXM);
+            osal_usleep(EC_TIMEOUTTXM);
 
             WRITE(slave, 0x6081, 0, buf32, 50000, "Set Profile Velocity");
             osal_usleep(EC_TIMEOUTTXM);
