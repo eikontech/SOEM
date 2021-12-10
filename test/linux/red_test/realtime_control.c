@@ -182,7 +182,7 @@ void redtest(char *ifname)
             osal_usleep(EC_TIMEOUTTXM);
 
             // WRITE(slave, 0x6080, 0, buf32, 314572, "Set Maximum Motor Velocity");
-            READ(slave, 0x6080, 0, buf32, "Set Maximum Motor Velocity");
+            READ(slave, 0x6080, 0, buf32, "Read Maximum Motor Velocity");
             osal_usleep(EC_TIMEOUTTXM);
 
             WRITE(slave, 0x6081, 0, buf32, 50000, "Set Profile Velocity");
