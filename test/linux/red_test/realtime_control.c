@@ -903,6 +903,14 @@ OSAL_THREAD_FUNC keyboardcheck()
          error_cumulative = 0;
          printf("Cyclic Sync Torque Mode\n");
          break;
+      case 11: // position
+         operation_mode = 8;
+         target_position = default_position;
+         target_velocity = default_velocity;
+         target_torque = default_torque;
+         error_cumulative = 0;
+         printf("Cyclic Sync Position Mode\n");
+         break;
       default:
          break;
       }
